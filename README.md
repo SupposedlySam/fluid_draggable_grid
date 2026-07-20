@@ -9,14 +9,21 @@ change is remembered per viewport width.
 
 ## Why this exists
 
-Bento-style dashboards are everywhere, but the grids behind them are rigid:
-rectangles snapping into rectangles. `amoeba_grid` makes the field feel
-alive:
+Bento-style dashboards are everywhere, but the dashboard grids behind them
+are rigid: rectangles snapping into rectangles. `amoeba_grid` makes the
+whole dashboard feel alive.
 
-| Push a card *through* another | Carve a notch into a card |
+**The signature move** — grab a card and carry it across the dashboard:
+every card it crosses cedes its edge live and reverts as you pass, the
+field auto-scrolls when you reach its edge, and whoever you land on makes
+room:
+
+![Dragging a card across the dashboard, every card ceding as it passes](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/amoeba-push.gif)
+
+| Resize across rows and columns at once | Carve a notch into a card |
 | --- | --- |
-| ![Amoeba push](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/amoeba-push.gif) | ![Carve a notch](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/carve-notch.gif) |
-| The neighbor cedes its aggressed edge live, reverts if you pass beyond it, and keeps its ceded shape if you drop while overlapping. | Side handles move one strip at a time; corner handles (convex *and* concave) move both edges. Previews snap at 50% cell crossings. |
+| ![L-shaped resize gesture](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/l-gesture.gif) | ![Carving a notch](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/carve-notch.gif) |
+| One L-shaped gesture on a single side handle: two columns left, then one row down — horizontal and vertical resizing together, pushing three neighbors amoeba-style. | Side handles retract one strip at a time; the notch gets a proper inside corner radius and its own concave handle. Previews snap at 50% cell crossings. |
 
 ## Features
 
@@ -41,6 +48,8 @@ alive:
   bucket and resolved mobile-first, through a two-method storage interface.
 - **Deep instrumentation** — every hover, snap, trim, relocation, and
   commit streams from `AmoebaGridDiagnostics`; debug-only, inert in release.
+- **Built for dashboards** — bento layouts, admin panels, home-automation
+  boards, analytics dashboards: anywhere users arrange widgets themselves.
 
 ## Quick start
 
@@ -84,7 +93,11 @@ class MyPrefsStorage implements AmoebaGridStorage {
 
 ## Interaction model
 
-![Handle reveal](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/handle-reveal.png)
+A hover-revealed edge handle — the circle is the affordance, but the grab
+zone covers the entire edge plus half the gutter, and once revealed it owns
+the press wherever its zone reaches:
+
+![A revealed edge handle with hint dots on the other edges](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/handle-reveal.png)
 
 | Gesture | Result |
 | --- | --- |
