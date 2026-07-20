@@ -1,10 +1,18 @@
 name: amoeba_grid
 description: >-
-  An amoeba dashboard grid. Cards reshape strip-by-strip into
-  organic polyomino silhouettes, push through each other amoeba-style, and
-  persist user shaping per viewport breakpoint.
-version: 0.1.0
+  Dashboard cards that behave like amoebas - reshape into polyomino
+  silhouettes, push through each other, and remember their layout.
+version: 0.0.1
 repository: https://github.com/SupposedlySam/amoeba_grid
+topics:
+  - grid
+  - dashboard
+  - drag-and-drop
+  - layout
+  - widgets
+screenshots:
+  - description: Bento dashboard built with amoeba_grid on macOS
+    path: doc/hero.png
 
 environment:
   sdk: ^3.12.0

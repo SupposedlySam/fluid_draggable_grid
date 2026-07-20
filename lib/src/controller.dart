@@ -144,6 +144,16 @@ class AmoebaGridController extends ChangeNotifier {
     }
   }
 
+  void _emitCommittedLayout(String reason) {
+    if (!AmoebaGridDiagnostics.isActive) return;
+    AmoebaGridDiagnostics.emit(AmoebaGridEventKind.layoutCommitted, reason, {
+      for (final entry in _committed.entries)
+        entry.key: '(${entry.value.minCol},${entry.value.minRow})..'
+            '(${entry.value.maxCol},${entry.value.maxRow}) '
+            '${entry.value.cells.length}c',
+    });
+  }
+
   void _recomputeCommitted() {
     final width = _metrics?.viewportSize.width;
     _committed.clear();
@@ -153,6 +163,7 @@ class AmoebaGridController extends ChangeNotifier {
           : _layoutData.resolve(entry.key, width, config);
       _committed[entry.key] = override ?? entry.value;
     }
+    _emitCommittedLayout('committed layout recomputed');
     notifyListeners();
   }
 

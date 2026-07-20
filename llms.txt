@@ -1,0 +1,135 @@
+# amoeba_grid — reference for AI assistants
+
+Flutter package. Dashboard grid of draggable, reshapeable polyomino cards
+with amoeba-style collision resolution and per-breakpoint persistence.
+Import: `package:amoeba_grid/amoeba_grid.dart`. Pure Flutter (no plugins).
+
+## Coordinate & geometry model
+
+- The field is a grid of SQUARE units. `AmoebaGridConfig.columns/rows` are
+  MINIMUMS: effective counts (`GridMetrics.columns/rows`) grow to fill the
+  viewport at `maxCellExtent`, and further to cover any occupied cell.
+- Cell extent flexes: `clamp((viewportWidth - gap*(cols+1)) / cols,
+  minCellExtent, maxCellExtent)`. Pitch = cellExtent + gap. When even
+  minCellExtent doesn't fit, the field pans (TwoDimensionalScrollable).
+- `CellIndex(col, row)`: absolute grid address. `CardShape`: immutable
+  Set<CellIndex>; encodes position AND silhouette; must be non-empty;
+  polyominoes allowed. `CardShape.rect(col, row, w, h)` helper.
+- Gaps: cards inset gap/2 inside their cell footprint. Gaps between a
+  card's own cells are visually bridged; between different cards exactly
+  one `gap` is always respected, including diagonal pinches.
+- Outlines: traced boundary of the cell-union, inset gap/2, rounded with
+  `outsideCornerRadius` (convex) / `insideCornerRadius` (concave), clamped
+  so arcs never overlap. Shape morphs animate by path resampling.
+
+## Core API
+
+AmoebaGridConfig({columns=8, rows=12, minCellExtent=72, maxCellExtent=160,
+  gap=12, insideCornerRadius=10, outsideCornerRadius=22, breakpoints});
+  breakpoints default [0,600,905,1240,1600] (viewport-width buckets).
+
+AmoebaGridController({required config, AmoebaGridStorage? storage,
+  String? storageKey})
+  - load(): Future — reads persisted layout; call once (the view does it).
+  - registerCards(Map<String,CardShape> initialShapes) — view does it.
+  - effectiveShape(id) / committedShape(id): CardShape?
+  - session: DragSession? (kind move|resize, cardId, preview, submissives)
+  - resetLayout(): clears all persisted overrides.
+  - occupiedColumns/occupiedRows: feed metrics growth.
+
+AmoebaGridView({required controller, required cards, AmoebaGridStyle? style})
+AmoebaGridCard({required id, required initialShape, required child, color})
+  - User shaping persists and OVERRIDES initialShape (mobile-first per
+    viewport-width bucket: largest breakpoint <= width wins).
+
+AmoebaGridStorage: two methods — Future<String?> read(key),
+  Future<void> write(key, value). Default: in-memory. Layout JSON is
+  versioned; key default 'amoeba_grid.layout.v1'.
+
+AmoebaGridStyle.fromTheme(theme) or const AmoebaGridStyle(cardColor,
+  cardBorderColor, accentColor, handleColor, backdropDotColor,
+  cardElevation).
+
+## Interaction semantics (what gestures do)
+
+- Body drag = MOVE. Preview (accent outline) snaps at 50% of each cell
+  crossing (pitch covers cell+gap). Drop commits; Esc cancels.
+- Side handle drag = STRIP resize: only the row/col strip under that edge
+  segment extends/retracts. Retraction never empties or disconnects a
+  shape. L-gesture: after dragging outward, perpendicular movement grows
+  ONLY the new section.
+- Corner handle drag (convex AND concave notches) = both full edge
+  segments through the corner move; diagonal fill keeps convex corners
+  square. Concave pulls fill/carve the notch.
+- Collisions (aggressor preview vs other cards' committed shapes): the
+  submissive cedes cells from the edge the aggressor hit (decided
+  edge-to-edge at contact; re-decided per fresh contact), per overlapped
+  row/col through the aggressor's far edge. No remainder -> relocate
+  opposite the entry edge (one cascade level). Transient: reverts the
+  moment overlap ends; on drop every active submissive commits its shape.
+- Hit testing: containment-first (a press inside a card belongs to it);
+  handles are whole-edge bands (interior reach 12px, outward ~hitRadius);
+  in gutters the nearest handle wins (midline split); corners outrank
+  sides; a hover-revealed handle owns the press anywhere in its zone.
+- Keyboard: Escape cancels an active drag.
+
+## Shape-aware content widgets
+
+All read AmoebaCardScope (auto-injected around every card child); all
+degrade to plain rectangular behavior outside a card. Geometry
+(AmoebaCardGeometry): size, path, rowBands/columnBands (merged free spans),
+largestRect, regions (greedy maximal-rectangle decomposition), insets.
+
+- AmoebaContentArea({child, padding, alignment}): lays child in
+  largestRect — never bitten by notches.
+- AmoebaRegions({builder(context, AmoebaRegion)->Widget?}): one call per
+  rectangular sub-region, area-descending; region.isLargest, cellWidth/
+  cellHeight, rect.
+- AmoebaFlow({axis, spacing, alignment(start|center|end|stretch),
+  children}) + AmoebaColumn/AmoebaRow presets: children constrained to the
+  free span at their main-axis position; band-straddlers get the span
+  intersection.
+- AmoebaText(text, {style, lineSpacing}): greedy band-by-band line layout;
+  wraps around notches incl. split spans; no selection; single style.
+- AmoebaPadding({padding, child}): pads AND republishes deflated geometry.
+  Outline-aware: interior card edges (notches/steps) receive padding too.
+  Use it (not plain Padding) above any Amoeba* layout widget.
+- Constraint: AmoebaFlow/AmoebaText must fill their scope box; use
+  AmoebaPadding to inset, never a bare Padding, or their band coordinates
+  misalign.
+
+## Diagnostics
+
+AmoebaGridDiagnostics.enabled = true (only honored in debug;
+release-inert). .events: broadcast Stream<AmoebaGridEvent>. Kinds:
+metricsResolved, handleHoverEnter/Exit, pointerDown (position + what it
+hit), gestureAccepted/Rejected (arena outcomes), dragStart, dragUpdate,
+previewChanged, submissiveTrimmed/Relocated/Reverted, dragCancelled,
+layoutCommitted (includes full committed layout on recompute),
+layoutLoaded/Saved, edgeAutoScroll. attachDebugPrintLogger() pipes to
+debugPrint with an [amoeba_grid] prefix.
+
+## Recipes
+
+- Persist with shared_preferences: implement AmoebaGridStorage.read/write
+  around SharedPreferences.getInstance().
+- Different layouts per window size: automatic — edits save into the
+  active viewport-width bucket and resolve mobile-first.
+- Programmatic reset: controller.resetLayout().
+- Observe layout changes: listen to the controller (ChangeNotifier) or the
+  diagnostics stream's layoutCommitted events.
+- Testing hit zones: engine functions handlesFor/hitTestHandles/
+  interactionAt in src/engine/handles.dart are pure and unit-testable; see
+  the package's test/hitbox_test.dart for boundary-testing patterns.
+
+## Gotchas
+
+- Card ids must be stable; shapes are keyed by id in persistence.
+- initialShape only applies where no persisted override exists for the
+  active breakpoint chain.
+- Content in concave cutouts is clipped, not reflowed — use the content
+  widgets above for reflow.
+- The morph animates the clip, not the layout: content lays out against
+  the settled target shape (intentional; avoids per-frame reflow).
+- Trackpad two-finger pans always scroll the field; card drags require a
+  button/touch drag.

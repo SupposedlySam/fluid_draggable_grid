@@ -50,7 +50,7 @@ class _DiagnosticsConsoleState extends State<DiagnosticsConsole> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('FLUID GRID DIAGNOSTICS',
+            Text('AMOEBA GRID DIAGNOSTICS',
                 style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.primary,
                     letterSpacing: 1.2)),

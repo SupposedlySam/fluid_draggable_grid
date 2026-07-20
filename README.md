@@ -1,53 +1,53 @@
 # amoeba_grid
 
-An amoeba dashboard grid for Flutter. Cards live on a fixed field of
-square units, reshape **strip-by-strip into organic polyomino silhouettes**,
-push through each other **amoeba-style**, and remember the user's shaping per
-viewport breakpoint.
+**Dashboard cards that behave like amoebas.** A Flutter grid where cards are
+polyominoes, not rectangles — drag one through another and the neighbor's
+edge cedes like a living thing, reshape a card strip by strip, and every
+change is remembered per viewport width.
 
-Built for bento-style dashboards: dark-mode friendly, gap-respecting, and
-rendered with `CustomPainter` outlines (proper inside/outside corner radii on
-non-rectangular shapes).
+![amoeba_grid demo dashboard](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/hero.png)
 
-## Highlights
+## Why this exists
 
-- **Amoeba grid, fluid cells** — you configure minimum `columns x rows`; the
-  square cell extent flexes between `minCellExtent` and `maxCellExtent` to
-  fill the viewport, and when there's room for more whole units at max
-  extent, the field grows extra columns/rows to match the window. When even
-  the minimum can't fit, the field pans in both axes (spreadsheet-style,
-  powered by `TwoDimensionalScrollable`).
-- **Cards are not just rectangles** — every open cell edge exposes a
-  semicircular grab handle (progressively revealed on hover); dragging one
-  extends or retracts *just that row/column strip*, and dragging
-  perpendicular mid-gesture grows only the newly carved section (L-shaped
-  drags). Corners — convex *and* concave — use standard both-axes rules
-  with quarter-circle affordances that respect the corner radii.
-- **50% snap previews** — dragging past the midpoint of the next column/row
-  (gap midpoints included) snaps a preview outline; releasing commits it.
-- **Aggressor / submissive collisions** — drag a card through another and the
-  other card's edge defers like an amoeba: it cedes cells from the edge the
-  aggressor hit (decided edge-to-edge at contact, and re-decided on every
-  fresh contact within the same drag), reverts the moment you pass beyond it
-  (transient values), and records its ceded shape as its own if you drop
-  while overlapping. A card that would shrink below 1x1 jumps to the side
-  opposite the aggressor instead.
-- **Gaps always respected** — identical horizontal/vertical gutters between
-  islands, including self-adjacent diagonal pinches.
-- **Persistence with breakpoints** — user shaping is stored against the
-  viewport-width breakpoint it was made at and resolved mobile-first, so a
-  narrow window and a wide window can hold different layouts. Storage is a
-  two-method interface; bring `shared_preferences`, a file, or a server.
-- **Deep instrumentation, debug-only** — every hover, snap, trim, relocation,
-  commit, and persistence event streams from `AmoebaGridDiagnostics`, gated
-  behind a flag that is inert in release builds.
+Bento-style dashboards are everywhere, but the grids behind them are rigid:
+rectangles snapping into rectangles. `amoeba_grid` makes the field feel
+alive:
 
-## Usage
+| Push a card *through* another | Carve a notch into a card |
+| --- | --- |
+| ![Amoeba push](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/amoeba-push.gif) | ![Carve a notch](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/carve-notch.gif) |
+| The neighbor cedes its aggressed edge live, reverts if you pass beyond it, and keeps its ceded shape if you drop while overlapping. | Side handles move one strip at a time; corner handles (convex *and* concave) move both edges. Previews snap at 50% cell crossings. |
+
+## Features
+
+- **Polyomino cards** — outlines traced with proper inside/outside corner
+  radii on any silhouette, rendered with `CustomPainter`, morphing
+  organically between shapes.
+- **Amoeba collisions** — aggressor/submissive resolution: cards defer their
+  aggressed edge while you drag, revert when cleared, commit on drop, and
+  relocate when they'd shrink below 1x1.
+- **L-shaped resize gestures** — drag a side handle out, then perpendicular:
+  only the newly carved section grows.
+- **Hit testing that respects your eyes** — whole-edge grab bands, gutter
+  midline splits between adjacent cards, containment-first ownership, and
+  sticky hover reveals: *what you see is what you grab*. Exhaustively
+  boundary-tested.
+- **Fluid field** — configure minimum `columns x rows`; the grid grows to
+  fill wide windows, pans in both axes when it can't, auto-scrolls at the
+  edges mid-drag, and always keeps every card reachable.
+- **Shape-aware content** — text that wraps around notches, flows that
+  narrow with the card, and safe areas that dodge cutouts (see below).
+- **Breakpoint persistence** — user shaping is stored per viewport-width
+  bucket and resolved mobile-first, through a two-method storage interface.
+- **Deep instrumentation** — every hover, snap, trim, relocation, and
+  commit streams from `AmoebaGridDiagnostics`; debug-only, inert in release.
+
+## Quick start
 
 ```dart
 final controller = AmoebaGridController(
   config: const AmoebaGridConfig(
-    columns: 8,
+    columns: 8,            // minimums — the field grows with the window
     rows: 12,
     minCellExtent: 68,
     maxCellExtent: 128,
@@ -71,7 +71,7 @@ AmoebaGridView(
 );
 ```
 
-Persistence is two methods:
+Persistence is two methods — bring `shared_preferences`, a file, a server:
 
 ```dart
 class MyPrefsStorage implements AmoebaGridStorage {
@@ -82,65 +82,68 @@ class MyPrefsStorage implements AmoebaGridStorage {
 }
 ```
 
-Instrumentation:
-
-```dart
-if (kDebugMode) {
-  AmoebaGridDiagnostics.enabled = true;           // inert in release builds
-  AmoebaGridDiagnostics.events.listen(onEvent);   // structured event stream
-  // or AmoebaGridDiagnostics.attachDebugPrintLogger();
-}
-```
-
-## Shape-aware content
-
-Flutter's layout protocol is rectangular (`BoxConstraints`), so plain
-widgets can't flow around a notch — but amoeba shapes are cell-quantized,
-which makes shape-aware layout tractable. Every card's child is wrapped in
-a `AmoebaCardScope` publishing its `AmoebaCardGeometry` (bands, largest
-inscribed rectangle, maximal-rectangle regions), and a small family of
-content widgets builds on it:
-
-| Widget | What it does |
-| --- | --- |
-| `AmoebaContentArea` | SafeArea for notches: lays its child in the largest rectangle fully inside the shape |
-| `AmoebaRegions` | One builder call per rectangular sub-region of the shape (area-descending) |
-| `AmoebaColumn` / `AmoebaRow` / `AmoebaFlow` | Flow children along an axis, constraining each to the free span at its position |
-| `AmoebaText` | Text that wraps band-by-band around notches (a `shape-outside` equivalent) |
-| `AmoebaPadding` | Padding that republishes correctly-deflated geometry to fluid widgets below |
-
-All of them degrade gracefully to plain rectangular behavior outside a
-amoeba card. Content is laid out against the settled target shape while the
-morph clip animates, so reshaping never causes per-frame reflow jitter.
-
-```dart
-AmoebaGridCard(
-  id: 'notes',
-  initialShape: CardShape.rect(2, 4, 3, 3),
-  child: AmoebaPadding(
-    padding: const EdgeInsets.all(16),
-    child: AmoebaText('Words flow around whatever you carve…'),
-  ),
-);
-```
-
 ## Interaction model
+
+![Handle reveal](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/doc/handle-reveal.png)
 
 | Gesture | Result |
 | --- | --- |
 | Drag card body | Move the whole card; snapped preview at 50% crossings |
-| Drag side handle | Extend/retract that single row/column strip |
+| Drag anywhere along a side edge | Extend/retract that single row/column strip |
 | ...then drag perpendicular | Grow only the new section in that direction |
-| Drag corner handle (convex or concave) | Standard corner resize: both edge segments through the corner |
-| Drag near viewport edge | Auto-pans the field under the drag |
+| Drag a corner (convex or concave) | Standard corner resize: both edge segments through the corner |
+| Drag near a viewport edge | Auto-pans the field under the drag |
 | Background drag / trackpad scroll | Pan the whole field in both axes |
 | <kbd>Esc</kbd> during a drag | Cancel and revert everything |
 
+Handles reveal progressively on hover, cover their entire edge (not just
+the visible circle), and once revealed they own the press wherever their
+zone reaches — a neighboring card can never steal the drag out from under
+the pointer.
+
+## Shape-aware content
+
+Flutter's layout protocol is rectangular, so plain widgets clip at notches.
+Every card's child is wrapped in an `AmoebaCardScope` publishing its
+geometry (bands, largest inscribed rectangle, maximal-rectangle regions),
+and a small widget family builds on it:
+
+| Widget | What it does |
+| --- | --- |
+| `AmoebaContentArea` | SafeArea for notches: child lives in the largest rectangle inside the shape |
+| `AmoebaRegions` | One builder call per rectangular sub-region (area-descending) |
+| `AmoebaColumn` / `AmoebaRow` / `AmoebaFlow` | Flow children along an axis, constrained to the free span at each position |
+| `AmoebaText` | Text that wraps band-by-band around notches (a `shape-outside` equivalent) |
+| `AmoebaPadding` | Outline-aware padding: interior card edges (notches, steps) respect it too |
+
+All degrade gracefully to plain rectangular behavior outside a card.
+Content lays out against the settled target shape while the morph clip
+animates — reshaping never causes per-frame reflow jitter.
+
+## Instrumentation
+
+```dart
+if (kDebugMode) {
+  AmoebaGridDiagnostics.enabled = true;         // inert in release builds
+  AmoebaGridDiagnostics.events.listen(onEvent); // structured event stream
+}
+```
+
+Pointer downs (and what they hit), gesture-arena outcomes, snap previews,
+submissive trims/relocations/reverts, commits, persistence, metrics — the
+demo app renders the stream as an on-screen console.
+
+## For AI assistants
+
+A machine-oriented reference of the full API surface, geometry model, and
+interaction semantics lives in
+[`llms.txt`](https://raw.githubusercontent.com/SupposedlySam/amoeba_grid/main/llms.txt).
+
 ## Example
 
-`example/` contains a bento-style dashboard (macOS + web) with live config
-sliders (gap, radii, cell extents), a diagnostics console overlay, and
-`shared_preferences` persistence. Run it with:
+[`example/`](https://github.com/SupposedlySam/amoeba_grid/tree/main/example)
+is the bento dashboard shown above (macOS + web): live config sliders,
+diagnostics console, `shared_preferences` persistence.
 
 ```sh
 cd example && flutter run -d macos
@@ -148,6 +151,6 @@ cd example && flutter run -d macos
 
 ## Status
 
-Early release. The API surface (`AmoebaGridConfig`, `AmoebaGridController`,
-`AmoebaGridCard`, `AmoebaGridStorage`, `AmoebaGridDiagnostics`) is small on
-purpose; feedback welcome.
+`0.0.1` — early and opinionated. The API surface is intentionally small;
+issues and PRs welcome at
+[SupposedlySam/amoeba_grid](https://github.com/SupposedlySam/amoeba_grid).
