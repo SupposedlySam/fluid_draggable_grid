@@ -139,6 +139,11 @@ class RenderFluidText extends RenderBox {
           wordIndex < words.length) {
         for (final span in band.spans) {
           if (wordIndex >= words.length) break;
+          // Outline-aware padding can trim spans of one band unevenly;
+          // only fill lines that fit inside this span vertically.
+          if (lineTop < span.top || lineTop + lineHeight > span.bottom) {
+            continue;
+          }
           final line =
               _fillLine(words, wordIndex, span.width);
           if (line == null) continue; // span too narrow for the next word

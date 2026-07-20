@@ -150,8 +150,10 @@ List<GridHandle> handlesFor(
   final handles = <GridHandle>[];
   final hitRadius = (metrics.cellExtent * 0.38).clamp(12.0, 26.0);
   final outsideRadius = metrics.config.outsideCornerRadius;
-  // Side handles cover their whole cell edge.
-  final sideTangentReach = metrics.cellExtent / 2;
+  // Side handles cover their whole cell edge plus half the bridged gap on
+  // each side, so adjacent strips' zones meet exactly at gap midlines and
+  // a multi-cell edge has no dead spots.
+  final sideTangentReach = (metrics.cellExtent + metrics.gap) / 2;
 
   for (final cell in shape.cells) {
     final rect = metrics.cellRect(cell);

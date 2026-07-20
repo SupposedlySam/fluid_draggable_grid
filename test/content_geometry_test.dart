@@ -99,5 +99,36 @@ void main() {
     test('pitch sanity', () {
       expect(pitch, 90);
     });
+
+    test('deflate insets interior card edges, not just the bounding box',
+        () {
+      // L-shape: arm (0,0)-(0,1), foot (1,1). The foot's top and the arm's
+      // right are card edges created by the notch — interior to the
+      // bounding box, but they must still receive padding.
+      final shape = CardShape(
+          const [CellIndex(0, 0), CellIndex(0, 1), CellIndex(1, 1)]);
+      final geometry = FluidCardGeometry.compute(shape, metrics)
+          .deflate(const EdgeInsets.all(10));
+
+      final arm = geometry.regions
+          .firstWhere((r) => r.cellWidth == 1 && r.cellHeight == 2);
+      final foot = geometry.regions
+          .firstWhere((r) => r.cellWidth == 1 && r.cellHeight == 1);
+
+      // Arm (original local 0,0,80,170): all four sides on the outline.
+      expect(arm.rect, const Rect.fromLTRB(0, 0, 60, 150));
+      // Foot (original local 90,90,170,170): top/right/bottom on the
+      // outline get 10; the left faces the bridged gap and keeps its edge.
+      expect(foot.rect, const Rect.fromLTRB(80, 90, 150, 150));
+    });
+
+    test('cropTo stays pure windowing (no outline insets)', () {
+      final geometry =
+          FluidCardGeometry.compute(CardShape.rect(0, 0, 2, 2), metrics);
+      final cropped =
+          geometry.cropTo(const Rect.fromLTRB(20, 20, 120, 120));
+      expect(cropped.size, const Size(100, 100));
+      expect(cropped.largestRect.topLeft, Offset.zero);
+    });
   });
 }

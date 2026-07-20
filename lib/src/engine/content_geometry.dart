@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
@@ -120,7 +122,13 @@ class FluidCardGeometry {
   /// (padding.left, padding.top), spans and regions are trimmed, and
   /// anything that falls outside disappears. Used by FluidPadding so nested
   /// fluid widgets keep seeing correct geometry.
-  FluidCardGeometry deflate(EdgeInsets padding) {
+  ///
+  /// With [fromOutline] (the default), padding is applied against the card
+  /// *outline*, not just the bounding box: any rect side that lies on an
+  /// open card edge — including interior edges created by notches and steps
+  /// — is inset, so content respects the padding on every card edge. Sides
+  /// facing the card interior (bridged gaps, other regions) are untouched.
+  FluidCardGeometry deflate(EdgeInsets padding, {bool fromOutline = true}) {
     final shifted = Offset(-padding.left, -padding.top);
     final newSize = Size(
       (size.width - padding.horizontal).clamp(0.0, double.infinity),
@@ -129,7 +137,9 @@ class FluidCardGeometry {
     final window = Offset.zero & newSize;
 
     Rect? clip(Rect rect) {
-      final moved = rect.shift(shifted).intersect(window);
+      final inset =
+          fromOutline ? _insetOutlineSides(rect, padding) : rect;
+      final moved = inset.shift(shifted).intersect(window);
       return (moved.width <= 0 || moved.height <= 0) ? null : moved;
     }
 
@@ -142,12 +152,15 @@ class FluidCardGeometry {
           if (clipped != null) spans.add(clipped);
         }
         if (spans.isEmpty) continue;
-        final start = axis == Axis.vertical
-            ? spans.first.top
-            : spans.first.left;
-        final end = axis == Axis.vertical
-            ? spans.first.bottom
-            : spans.first.right;
+        // Outline insets can trim spans of one band unevenly.
+        var start = double.infinity;
+        var end = double.negativeInfinity;
+        for (final span in spans) {
+          start = math.min(
+              start, axis == Axis.vertical ? span.top : span.left);
+          end = math.max(
+              end, axis == Axis.vertical ? span.bottom : span.right);
+        }
         result.add(FluidBand(start: start, end: end, spans: spans));
       }
       return result;
@@ -200,13 +213,44 @@ class FluidCardGeometry {
 
   /// A copy scoped to a rectangular window of the current box — used when a
   /// child is placed inside a region or the largest rect, so nested fluid
-  /// widgets see plain rectangular geometry.
-  FluidCardGeometry cropTo(Rect window) => deflate(EdgeInsets.fromLTRB(
-        window.left,
-        window.top,
-        (size.width - window.right).clamp(0.0, double.infinity),
-        (size.height - window.bottom).clamp(0.0, double.infinity),
-      ));
+  /// widgets see plain rectangular geometry. Pure windowing: no
+  /// outline-based insets.
+  FluidCardGeometry cropTo(Rect window) => deflate(
+        EdgeInsets.fromLTRB(
+          window.left,
+          window.top,
+          (size.width - window.right).clamp(0.0, double.infinity),
+          (size.height - window.bottom).clamp(0.0, double.infinity),
+        ),
+        fromOutline: false,
+      );
+
+  /// Insets each side of [rect] that lies on an open card edge. A side is
+  /// "on the outline" when probe points just beyond it fall outside the
+  /// card path — true for the bounding edges and for interior edges at
+  /// notches/steps, false for sides facing bridged gaps inside the card.
+  /// Mixed sides (partly open, partly interior) are inset conservatively so
+  /// padding is guaranteed wherever the side meets the outline.
+  Rect _insetOutlineSides(Rect rect, EdgeInsets padding) {
+    const probeFractions = [0.15, 0.5, 0.85];
+    bool openBeyondVertical(double x) => probeFractions.any((t) =>
+        !path.contains(Offset(x, rect.top + rect.height * t)));
+    bool openBeyondHorizontal(double y) => probeFractions.any((t) =>
+        !path.contains(Offset(rect.left + rect.width * t, y)));
+
+    return Rect.fromLTRB(
+      openBeyondVertical(rect.left - 1)
+          ? rect.left + padding.left
+          : rect.left,
+      openBeyondHorizontal(rect.top - 1) ? rect.top + padding.top : rect.top,
+      openBeyondVertical(rect.right + 1)
+          ? rect.right - padding.right
+          : rect.right,
+      openBeyondHorizontal(rect.bottom + 1)
+          ? rect.bottom - padding.bottom
+          : rect.bottom,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>

@@ -389,6 +389,9 @@ class _FluidGridViewState extends State<FluidGridView>
                 painter: GridBackdropPainter(metrics, style),
               ),
             ),
+            ...cards,
+            // Above the cards: a shrink preview lies entirely within the
+            // aggressor's current footprint and would be invisible below.
             if (previewPath != null)
               Positioned.fill(
                 child: IgnorePointer(
@@ -398,7 +401,6 @@ class _FluidGridViewState extends State<FluidGridView>
                   ),
                 ),
               ),
-            ...cards,
             if (_hoverHandles.isNotEmpty && !controller.isDragging)
               Positioned.fill(
                 child: IgnorePointer(
