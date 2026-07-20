@@ -460,9 +460,13 @@ class TeamCard extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Row(
           children: [
+            // Facepile overlap: every avatar after the first sits in a
+            // narrower box aligned right, so it overhangs leftward over
+            // its predecessor — nothing leaks past the row's left edge.
             for (final (index, initials) in _members.indexed)
               Align(
-                widthFactor: 0.72,
+                widthFactor: index == 0 ? 1.0 : 0.72,
+                alignment: Alignment.centerRight,
                 child: CircleAvatar(
                   radius: 18,
                   backgroundColor: Color.lerp(
