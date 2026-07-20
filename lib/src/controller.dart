@@ -95,6 +95,15 @@ class FluidGridController extends ChangeNotifier {
 
   Iterable<String> get cardIds => _initialShapes.keys;
 
+  /// Columns/rows needed to cover every committed shape. The grid view
+  /// feeds these back into metrics resolution so user-placed cards always
+  /// stay inside the pannable field, however small the window gets.
+  int get occupiedColumns => _committed.values
+      .fold(0, (max, shape) => shape.maxCol + 1 > max ? shape.maxCol + 1 : max);
+
+  int get occupiedRows => _committed.values
+      .fold(0, (max, shape) => shape.maxRow + 1 > max ? shape.maxRow + 1 : max);
+
   /// Registers the programmatic cards. Called by the widget; safe to call
   /// again when the card list changes.
   void registerCards(Map<String, CardShape> initialShapes) {

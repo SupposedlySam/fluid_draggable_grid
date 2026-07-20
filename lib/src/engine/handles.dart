@@ -68,7 +68,39 @@ class GridHandle {
     };
   }
 
-  bool hits(Offset point) => (point - center).distance <= hitRadius;
+  /// How far a handle's grab zone reaches into the card interior. The
+  /// outside half of the zone (over the gap) is fully grabbable, but inward
+  /// reach is capped so pressing card *content* near an edge grabs the card
+  /// body (move) instead of silently starting a resize.
+  static const double interiorReach = 12.0;
+
+  /// Unit vector pointing away from the card interior: the edge normal for
+  /// sides, the corner diagonal for convex corners, and the notch diagonal
+  /// for concave corners.
+  Offset get outwardUnit {
+    if (edge != null) {
+      return switch (edge!) {
+        CardinalEdge.north => const Offset(0, -1),
+        CardinalEdge.east => const Offset(1, 0),
+        CardinalEdge.south => const Offset(0, 1),
+        CardinalEdge.west => const Offset(-1, 0),
+      };
+    }
+    return switch (corner!) {
+      CornerKind.northWest => const Offset(-0.7071, -0.7071),
+      CornerKind.northEast => const Offset(0.7071, -0.7071),
+      CornerKind.southEast => const Offset(0.7071, 0.7071),
+      CornerKind.southWest => const Offset(-0.7071, 0.7071),
+    };
+  }
+
+  bool hits(Offset point) {
+    final delta = point - center;
+    if (delta.distance > hitRadius) return false;
+    final outwardDepth =
+        delta.dx * outwardUnit.dx + delta.dy * outwardUnit.dy;
+    return outwardDepth >= -interiorReach;
+  }
 
   String get debugLabel =>
       '${edge?.name ?? corner!.name}@$cell of $cardId';

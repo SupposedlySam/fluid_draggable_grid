@@ -76,6 +76,27 @@ void main() {
       final hit = hitTestHandles(handles, corner.center);
       expect(hit, corner);
     });
+
+    test('handle grab zones do not reach deep into card content', () {
+      final handles =
+          handlesFor('x', CardShape.rect(0, 0, 2, 2), metrics);
+      final north = handles.firstWhere((h) =>
+          !h.isCorner &&
+          h.edge == CardinalEdge.north &&
+          h.cell == const CellIndex(0, 0));
+      // Just outside the edge (over the gap): grabbable.
+      expect(
+          hitTestHandles(handles, north.center + const Offset(0, -10)),
+          north);
+      // Slightly inside: still grabbable within the interior band.
+      expect(
+          hitTestHandles(handles, north.center + const Offset(0, 8)),
+          north);
+      // Deep inside the card content: the body wins, not the handle.
+      expect(
+          hitTestHandles(handles, north.center + const Offset(0, 20)),
+          isNull);
+    });
   });
 
   group('lerpOutline', () {

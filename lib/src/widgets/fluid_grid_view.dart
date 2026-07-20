@@ -175,6 +175,14 @@ class _FluidGridViewState extends State<FluidGridView>
 
   bool _capturePanDown(Offset point, GridMetrics metrics) {
     final interaction = _interactionAt(point, metrics);
+    FluidGridDiagnostics.emit(FluidGridEventKind.pointerDown, 'pointer down', {
+      'at': '(${point.dx.toStringAsFixed(0)},${point.dy.toStringAsFixed(0)})',
+      'hit': interaction == null
+          ? 'none'
+          : interaction.$2 == null
+              ? 'body:${interaction.$1}'
+              : 'handle:${interaction.$2!.debugLabel}',
+    });
     if (interaction == null) {
       _pendingGrab = null;
       return false;
@@ -204,7 +212,11 @@ class _FluidGridViewState extends State<FluidGridView>
   void _onPanStart(DragStartDetails details, GridMetrics metrics) {
     final grab = _pendingGrab;
     _pendingGrab = null;
-    if (grab == null) return;
+    if (grab == null) {
+      FluidGridDiagnostics.emit(FluidGridEventKind.gestureRejected,
+          'pan accepted but no pending grab');
+      return;
+    }
     final (downPosition, cardId, handle) = grab;
     if (handle != null) {
       widget.controller.startResize(handle, downPosition);
@@ -300,7 +312,11 @@ class _FluidGridViewState extends State<FluidGridView>
     return LayoutBuilder(
       builder: (context, constraints) {
         final metrics = GridMetrics.resolve(
-            widget.controller.config, constraints.biggest);
+          widget.controller.config,
+          constraints.biggest,
+          minColumns: widget.controller.occupiedColumns,
+          minRows: widget.controller.occupiedRows,
+        );
         // Defer: updateMetrics notifies listeners and we are mid-build.
         if (widget.controller.metrics != metrics) {
           WidgetsBinding.instance.addPostFrameCallback(
@@ -466,6 +482,27 @@ class _CardPanRecognizer extends PanGestureRecognizer {
   void addAllowedPointer(PointerDownEvent event) {
     if (!shouldAccept(event.localPosition)) return;
     super.addAllowedPointer(event);
+  }
+
+  @override
+  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
+    // Trackpad two-finger pans always belong to the scrollable. Without
+    // this, PanGestureRecognizer claims them through a path that bypasses
+    // the pointer-down filter and the gesture dies over cards.
+  }
+
+  @override
+  void acceptGesture(int pointer) {
+    FluidGridDiagnostics.emit(
+        FluidGridEventKind.gestureAccepted, 'card pan won the arena');
+    super.acceptGesture(pointer);
+  }
+
+  @override
+  void rejectGesture(int pointer) {
+    FluidGridDiagnostics.emit(FluidGridEventKind.gestureRejected,
+        'card pan lost the arena (another recognizer took the drag)');
+    super.rejectGesture(pointer);
   }
 }
 

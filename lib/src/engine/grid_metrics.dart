@@ -23,14 +23,23 @@ class GridMetrics {
     required this.rows,
   });
 
-  factory GridMetrics.resolve(FluidGridConfig config, Size viewportSize) {
+  /// [minColumns]/[minRows] extend the field to cover occupied cells, so a
+  /// card placed on a wide window can never fall outside the pannable area
+  /// when the window shrinks.
+  factory GridMetrics.resolve(
+    FluidGridConfig config,
+    Size viewportSize, {
+    int minColumns = 0,
+    int minRows = 0,
+  }) {
     int unitsThatFit(double viewportExtent) =>
         ((viewportExtent - config.gap) /
                 (config.maxCellExtent + config.gap))
             .floor();
-    final columns =
-        math.max(config.columns, unitsThatFit(viewportSize.width));
-    final rows = math.max(config.rows, unitsThatFit(viewportSize.height));
+    final columns = math.max(math.max(config.columns, minColumns),
+        unitsThatFit(viewportSize.width));
+    final rows = math.max(math.max(config.rows, minRows),
+        unitsThatFit(viewportSize.height));
     final available = viewportSize.width - config.gap * (columns + 1);
     final ideal = available / columns;
     final extent =

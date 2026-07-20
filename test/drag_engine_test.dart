@@ -207,5 +207,21 @@ void main() {
       expect(narrow.columns, 4);
       expect(narrow.rows, 4);
     });
+
+    test('occupied cells extend the grid on small viewports', () {
+      const small = FluidGridConfig(
+          columns: 4,
+          rows: 4,
+          minCellExtent: 60,
+          maxCellExtent: 100,
+          gap: 10);
+      // A card parked at column 10 on a wide window must stay reachable
+      // when the window shrinks to phone size.
+      final tiny = GridMetrics.resolve(small, const Size(300, 400),
+          minColumns: 11, minRows: 6);
+      expect(tiny.columns, 11);
+      expect(tiny.rows, 6);
+      expect(tiny.contentSize.width, greaterThan(300));
+    });
   });
 }
