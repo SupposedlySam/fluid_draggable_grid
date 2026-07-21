@@ -2,16 +2,20 @@ import 'package:flutter/widgets.dart';
 
 import 'amoeba_card_scope.dart';
 
-/// Clips to the card outline (in the clipped widget's local coordinates)
-/// — the hard guarantee that no body content ever paints outside the
-/// silhouette, whatever a child does.
+/// Clips to the card outline INTERSECTED with the padded box — the hard
+/// guarantee that no body content ever paints outside the silhouette OR
+/// inside the chrome padding, whatever a child does. The raw outline alone
+/// is not enough: it extends `padding` past the box, so a partially
+/// scrolled row would shear right at the card edge instead of stopping at
+/// the padding line.
 class _OutlineClipper extends CustomClipper<Path> {
   const _OutlineClipper(this.path);
 
   final Path path;
 
   @override
-  Path getClip(Size size) => path;
+  Path getClip(Size size) => Path.combine(
+      PathOperation.intersect, path, Path()..addRect(Offset.zero & size));
 
   @override
   bool shouldReclip(_OutlineClipper oldClipper) => oldClipper.path != path;
