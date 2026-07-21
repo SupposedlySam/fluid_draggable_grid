@@ -1,11 +1,46 @@
-## Unreleased
+## 0.2.0
 
-- **Fix**: every corner radius flattened to a chamfer while a drag morph was
-  animating, popping back to a round arc on settle. `lerpOutline` resampled
-  both outlines to 96 evenly-spaced points and reconnected them as a straight
-  polyline, leaving ~2 samples on a whole corner arc. The morph now scales
-  its sample count with the perimeter and reconnects samples with midpoint
-  quadratics — straight runs stay straight, corners stay round.
+- **New — `AmoebaShell`**: shape-aware header/body card scaffold. The header pins
+  inside the highest solid span that can fit it (never a notch, never a
+  too-narrow arm); the body receives the full remaining shape below it, so flow
+  widgets keep re-flowing through notches. Exists because the obvious
+  compositions both fail — see its dartdoc.
+
+- **Shape-following padding**: `CardOutline.trace(extraInset:)` erodes the
+  outline uniformly (convex radii shrink, concave grow);
+  `AmoebaCardGeometry.erodedPath(inset)` exposes it. **`AmoebaPadding` now
+  clips its child to the eroded silhouette by default** (`clipToShape: false`
+  to opt out) — padding hugs the edge the way rectangle padding hugs a
+  rectangle, enforced no matter what the child paints. Content can no longer
+  leak onto the page background through empty bounding-box regions.
+
+- **`AmoebaListView` flow correctness**:
+  - rows adopt the narrower span when they touch (or come within a
+    geometry-derived clearance of) a horizontal notch/step edge, instead of
+    rendering flush against it;
+  - rows probe the outline's corner arcs and walk inward to clear them;
+  - rows probe the SAME eroded surface `AmoebaPadding` clips to
+    (`contentClip`), so the clip can never shear glyphs the layout thought
+    were safe;
+  - slots wholly outside the shape collapse instead of borrowing a distant
+    span;
+  - **flush sides**: a zero inset on any side (any combination) makes content
+    run straight to that edge past the corner arcs — the rounded outline
+    trims the corner pixels, like an edge-to-edge list in a rounded
+    container. Non-zero insets keep the arc-probe behavior.
+
+- **Fix — drag-morph chamfering**: `lerpOutline` resampled outlines into a
+  coarse polyline, flattening every corner arc to a chamfer mid-morph.
+  Samples now scale with perimeter and reconnect via midpoint quadratics —
+  corners stay round while dragging.
+
+- **Developer experience**:
+  - `AmoebaGridDiagnostics.showPaddingOverlay` (+ `paddingOverlayInset`)
+    paints every card's padding band translucent red in debug builds;
+  - an `AmoebaListView` nested inside `AmoebaContentArea` (windowed,
+    notch-free scope) warns in debug that rows will never re-flow;
+  - a box/geometry width mismatch (plain `Padding` between the card and a
+    flow widget) warns about broken span alignment.
 
 ## 0.1.0
 
