@@ -39,22 +39,20 @@ void main() {
     controller.updateDrag(Offset(100 + pitch * 6.1, 100));
     expect(controller.session!.submissives.containsKey('b'), isFalse);
 
-    // Back into contact — a fresh contact, now approaching from the east.
-    // The aggressor consumes b entirely from that side, so b relocates
-    // west (opposite the new entry edge). Drop records both shapes.
+    // Back into contact — the aggressor sweeps WEST into b and smothers it, so b RUNS EAST:
+    // opposite the aggressor's advance at the smother frame (runner rule). Drop records both shapes.
     controller.updateDrag(Offset(100 + pitch * 3.1, 100));
     final recontact = controller.session!.submissives['b']!;
-    expect(recontact.entryEdge, CardinalEdge.east);
     expect(recontact.relocated, isTrue);
     await controller.endDrag();
     expect(controller.committedShape('a'), CardShape.rect(3, 0, 2, 2));
-    expect(controller.committedShape('b'), CardShape.rect(1, 0, 2, 2));
+    expect(controller.committedShape('b'), CardShape.rect(5, 0, 2, 2));
 
     // A fresh controller over the same storage restores the user layout.
     final revived = makeController(storage);
     await revived.load();
     expect(revived.committedShape('a'), CardShape.rect(3, 0, 2, 2));
-    expect(revived.committedShape('b'), CardShape.rect(1, 0, 2, 2));
+    expect(revived.committedShape('b'), CardShape.rect(5, 0, 2, 2));
   });
 
   test('cancel reverts everything', () async {
@@ -68,7 +66,7 @@ void main() {
     expect(controller.effectiveShape('b'), CardShape.rect(4, 0, 2, 2));
   });
 
-  test('1x1 submissive relocates opposite the entry edge', () async {
+  test('1x1 runner flees opposite the aggressor advance at smother', () async {
     final storage = AmoebaGridMemoryStorage();
     final controller = AmoebaGridController(config: config, storage: storage)
       ..registerCards({
@@ -85,8 +83,8 @@ void main() {
 
     final tiny = controller.session!.submissives['tiny']!;
     expect(tiny.relocated, isTrue);
-    expect(tiny.shape, CardShape.rect(4, 0, 1, 1),
-        reason: 'jumps east, opposite the west entry edge');
+    expect(tiny.shape, CardShape.rect(1, 0, 1, 1),
+        reason: 'runner flees WEST — opposite the aggressor east advance at the smother frame');
   });
 
   test('re-contact from another side computes a fresh entry edge', () async {

@@ -125,7 +125,25 @@ CardShape applySideResize(
   GridMetrics metrics,
 ) {
   if (primarySteps <= 0) {
-    return applyStripResize(shape, handleCell, edge, primarySteps, metrics);
+    if (perpSteps == 0) {
+      return applyStripResize(shape, handleCell, edge, primarySteps, metrics);
+    }
+    // Inward L-gesture (mirror of the outward carve below): retract |primarySteps| along the edge
+    // normal AND deepen the notch |perpSteps| perpendicular, removing that whole block — not just
+    // the single strip. Keeps the card connected (largest component) and never empties it.
+    final (dc, dr) = edge.outward;
+    final (pc, pr) =
+        edge.isHorizontalDrag ? (0, perpSteps.sign) : (perpSteps.sign, 0);
+    final removed = <CellIndex>{};
+    for (var i = 0; i < -primarySteps; i++) {
+      for (var j = 0; j <= perpSteps.abs(); j++) {
+        removed.add(handleCell.translate(-dc * i + pc * j, -dr * i + pr * j));
+      }
+    }
+    final remaining = shape.cells.where((c) => !removed.contains(c));
+    if (remaining.isEmpty) return shape;
+    final result = CardShape(remaining);
+    return result.isConnected ? result : result.largestComponent;
   }
   final (dc, dr) = edge.outward;
   final (pc, pr) =
@@ -142,6 +160,69 @@ CardShape applySideResize(
   }
   if (added.isEmpty) return shape;
   return CardShape({...shape.cells, ...added});
+}
+
+/// Where a SMOTHERED submissive [shape] goes when it must run in [retreatDir], treating [blocked]
+/// (the aggressor plus every OTHER card) as fixed — a runner never displaces another card. The
+/// runner tactics, in order:
+///   1. FULL space — the whole card fits somewhere along the retreat direction: relocate at size.
+///   2. PARTIAL space — only part fits: keep the largest connected retreat-facing piece (the card
+///      shrinks to fill the gap, aggressor-facing cells trimmed away).
+///   3. NO space — return a single open cell adjacent (incl. diagonal) to the card, furthest toward
+///      the retreat direction; or null when even that doesn't exist (the caller then drops a 1x1
+///      into the aggressor, which cedes the cell).
+CardShape? runnerShape(
+  CardShape shape,
+  Set<CellIndex> blocked,
+  CardinalEdge retreatDir,
+  GridMetrics metrics,
+) {
+  final (dc, dr) = retreatDir.outward;
+  final maxStep = retreatDir.isHorizontalDrag ? metrics.columns : metrics.rows;
+  CardShape? bestPartial;
+  for (var step = 1; step <= maxStep; step++) {
+    final cand = shape.translate(dc * step, dr * step);
+    final inBounds = cand.cells.where(metrics.cellInBounds).toSet();
+    if (inBounds.isEmpty) break; // slid fully off the grid
+    final clear = inBounds.where((c) => !blocked.contains(c)).toSet();
+    // 1. Whole card fits, in bounds and clear of everything.
+    if (inBounds.length == shape.cells.length &&
+        clear.length == shape.cells.length) {
+      return cand;
+    }
+    // 2. Track the largest connected clear piece seen (the retreat-facing remainder).
+    if (clear.isNotEmpty) {
+      final piece = CardShape(clear).largestComponent;
+      if (bestPartial == null ||
+          piece.cells.length > bestPartial.cells.length) {
+        bestPartial = piece;
+      }
+    }
+  }
+  if (bestPartial != null) return bestPartial;
+
+  // 3. One open cell adjacent (8-neighbourhood) to the card, furthest toward the retreat direction.
+  CellIndex? best;
+  var bestScore = -1 << 30;
+  for (final c in shape.cells) {
+    for (var ec = -1; ec <= 1; ec++) {
+      for (var er = -1; er <= 1; er++) {
+        if (ec == 0 && er == 0) continue;
+        final n = c.translate(ec, er);
+        if (shape.cells.contains(n) ||
+            blocked.contains(n) ||
+            !metrics.cellInBounds(n)) {
+          continue;
+        }
+        final score = n.col * dc + n.row * dr;
+        if (score > bestScore) {
+          bestScore = score;
+          best = n;
+        }
+      }
+    }
+  }
+  return best == null ? null : CardShape({best});
 }
 
 /// A submissive card's transient reaction to the aggressor.

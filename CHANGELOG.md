@@ -51,6 +51,21 @@
   hit test now reads the controller's live metrics. Regression test:
   `test/scroll_resize_hittest_test.dart`.
 
+- **Fix — side-handle inward L-gesture.** Pulling a side handle IN and then perpendicular used to
+  drop the perpendicular drag entirely (it fell through to a plain strip retract), so "pull in,
+  then down" only ever carved a single row. The inward gesture now mirrors the outward one and
+  removes the full notch block, deepening it along the perpendicular axis.
+
+- **Fix — submissive resolution reworked to the runner model.** When an aggressor overlaps a card
+  it now: cedes the overlap (**trimmed**); keeps the LARGER side when **bisected**; and when fully
+  **smothered** becomes a **runner** that retreats OPPOSITE the aggressor's advance *at the smother
+  frame* (not first contact) and takes **full space at its original size**, **shrinks to fit** a
+  partial gap, or drops to a **1x1** (an open adjacent cell, or into the aggressor, which cedes that
+  cell). A runner never displaces another card and is never killed. This replaces the previous
+  chained "retreater-becomes-aggressor" behaviour, which could ping-pong two cards until one was
+  flung across the grid, and could drop the smaller half of a bisect or vanish a cornered card.
+  Covered by `test/submissive_ac_test.dart` and `test/resize_gesture_test.dart`.
+
 ## 0.1.0
 
 - **New — `AmoebaListView`**: a fixed-extent, vertically-scrolling list whose rows RE-FLOW to

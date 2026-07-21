@@ -54,6 +54,11 @@ class DragSession {
   /// Aggressed edge per card, held only while contact lasts.
   final Map<String, CardinalEdge> entryEdges = {};
 
+  /// Retreat direction per SMOTHERED card, captured at the moment of smother
+  /// (opposite the aggressor's advance that frame) and held stable while the
+  /// card stays a runner, so the retreat tracks the smother, not first contact.
+  final Map<String, CardinalEdge> smotherDirs = {};
+
   /// Last snapped cell-delta, used to derive the approach direction when a
   /// new card is first contacted.
   (int, int) lastCellDelta = (0, 0);
@@ -276,81 +281,117 @@ class AmoebaGridController extends ChangeNotifier {
   }
 
   void _resolveSubmissives(DragSession session, GridMetrics metrics) {
-    final aggressorCells = session.preview.cells;
     final previous = Map.of(session.submissives);
     session.submissives.clear();
+    final aggressor = session.preview.cells;
+    final resolved = <String, SubmissiveState>{};
+    final ceded = <CellIndex>{};
+    final contacted = <String>{};
 
-    final approach = _approachDirection(session);
-    final relocatedCells = <CellIndex>{};
+    // Cells of every card except [id] and the aggressor — a runner packs AROUND these and never
+    // displaces them. Uses already-resolved transient shapes so runners also avoid each other.
+    Set<CellIndex> othersOf(String id) {
+      final out = <CellIndex>{};
+      for (final other in _committed.keys) {
+        if (other == id || other == session.cardId) continue;
+        out.addAll((resolved[other]?.shape ?? _committed[other]!).cells);
+      }
+      return out;
+    }
 
-    for (final entry in _committed.entries) {
-      if (entry.key == session.cardId) continue;
-      final committed = entry.value;
-      if (!committed.cells.any(aggressorCells.contains)) {
-        // Contact broken: forget the aggressed edge so a re-contact from a
-        // different side (within the same drag) computes a fresh one.
-        session.entryEdges.remove(entry.key);
+    for (final id in _committed.keys) {
+      if (id == session.cardId) continue;
+      final committed = _committed[id]!;
+      if (!committed.cells.any(aggressor.contains)) {
+        session.entryEdges.remove(id);
+        session.smotherDirs.remove(id);
         continue;
       }
+      contacted.add(id);
+      final entryEdge = session.entryEdges.putIfAbsent(
+          id, () => _entryEdgeFor(committed, session, _approachDirection(session)));
 
-      final entryEdge = session.entryEdges.putIfAbsent(entry.key, () {
-        final edge = _entryEdgeFor(committed, session, approach);
-        AmoebaGridDiagnostics.emit(AmoebaGridEventKind.submissiveTrimmed,
-            'contact', {'card': entry.key, 'entryEdge': edge.name});
-        return edge;
-      });
-
-      final trimmed = trimSubmissive(committed, aggressorCells, entryEdge);
+      // Trimmed (partial overlap) / bisected (split — keep the larger side). AC #1, #2.
+      final trimmed = trimSubmissive(committed, aggressor, entryEdge);
       if (trimmed != null) {
-        session.submissives[entry.key] = SubmissiveState(
-            entryEdge: entryEdge, shape: trimmed, relocated: false);
-        if (previous[entry.key]?.shape != trimmed) {
-          AmoebaGridDiagnostics.emit(AmoebaGridEventKind.submissiveTrimmed,
-              'trimmed', {'card': entry.key, 'cells': trimmed.cells.length});
+        resolved[id] =
+            SubmissiveState(entryEdge: entryEdge, shape: trimmed, relocated: false);
+        session.smotherDirs.remove(id);
+        if (previous[id]?.shape != trimmed) {
+          AmoebaGridDiagnostics.emit(AmoebaGridEventKind.submissiveTrimmed, 'trimmed',
+              {'card': id, 'cells': trimmed.cells.length});
         }
         continue;
       }
 
-      // Nothing left to cede (< 1x1): jump to the side the aggressor is
-      // heading toward — opposite the first aggressed edge.
-      final relocated = relocateBeyond(
-          committed, aggressorCells, entryEdge.opposite, metrics);
-      if (relocated != null) {
-        relocatedCells.addAll(relocated.cells);
-        session.submissives[entry.key] = SubmissiveState(
-            entryEdge: entryEdge, shape: relocated, relocated: true);
-        AmoebaGridDiagnostics.emit(AmoebaGridEventKind.submissiveRelocated,
-            'relocated', {'card': entry.key, 'edge': entryEdge.opposite.name});
+      // SMOTHERED -> runner. The retreat direction is captured at the smother FRAME (opposite the
+      // aggressor's advance that frame) and held stable, so it tracks the smother, not first contact.
+      final retreatDir =
+          session.smotherDirs.putIfAbsent(id, () => _advanceDir(session).opposite);
+      final blocked = {...aggressor, ...othersOf(id)};
+      final runner = runnerShape(committed, blocked, retreatDir, metrics);
+      final CardShape shape;
+      if (runner != null) {
+        shape = runner; // full-size, partial shrink, or an open adjacent 1x1
       } else {
-        AmoebaGridDiagnostics.emit(AmoebaGridEventKind.submissiveRelocated,
-            'no room to relocate; reverting', {'card': entry.key});
+        // No open cell anywhere: drop a 1x1 into the aggressor's footprint (its retreat-facing end)
+        // and make the AGGRESSOR cede that cell, so the runner survives and nothing overlaps.
+        final (dc, dr) = retreatDir.outward;
+        final into = committed.cells.reduce(
+            (a, b) => (a.col * dc + a.row * dr) >= (b.col * dc + b.row * dr) ? a : b);
+        shape = CardShape({into});
+        ceded.add(into);
+      }
+      resolved[id] =
+          SubmissiveState(entryEdge: entryEdge, shape: shape, relocated: true);
+      AmoebaGridDiagnostics.emit(AmoebaGridEventKind.submissiveRelocated, 'runner',
+          {'card': id, 'dir': retreatDir.name, 'cells': shape.cells.length});
+    }
+
+    // The aggressor gives up any cells a cornered 1x1 runner had to take.
+    if (ceded.isNotEmpty) {
+      final kept = session.preview.cells.where((c) => !ceded.contains(c));
+      if (kept.isNotEmpty) {
+        final reduced = CardShape(kept);
+        session.preview =
+            reduced.isConnected ? reduced : reduced.largestComponent;
       }
     }
 
-    // One cascade pass: cards displaced by a relocated card cede space too.
-    if (relocatedCells.isNotEmpty) {
-      for (final entry in _committed.entries) {
-        if (entry.key == session.cardId) continue;
-        if (session.submissives.containsKey(entry.key)) continue;
-        final committed = entry.value;
-        if (!committed.cells.any(relocatedCells.contains)) continue;
-        final entryEdge =
-            session.entryEdges.putIfAbsent(entry.key, () => approach.opposite);
-        final trimmed =
-            trimSubmissive(committed, relocatedCells, entryEdge);
-        if (trimmed != null) {
-          session.submissives[entry.key] = SubmissiveState(
-              entryEdge: entryEdge, shape: trimmed, relocated: false);
-        }
-      }
-    }
-
+    session.submissives.addAll(resolved);
+    session.entryEdges.removeWhere((id, _) => !contacted.contains(id));
+    session.smotherDirs.removeWhere((id, _) => !contacted.contains(id));
     for (final id in previous.keys) {
       if (!session.submissives.containsKey(id)) {
         AmoebaGridDiagnostics.emit(AmoebaGridEventKind.submissiveReverted,
             'no longer overlapped; reverted', {'card': id});
       }
     }
+  }
+
+  /// The dominant direction the aggressor ADVANCED this frame — the growth of a resize or the shift
+  /// of a move (its preview vs the previous one). Captured at the smother frame to aim the retreat.
+  CardinalEdge _advanceDir(DragSession session) {
+    (double, double) centroid(Iterable<CellIndex> cells) {
+      var sx = 0.0, sy = 0.0, n = 0;
+      for (final c in cells) {
+        sx += c.col;
+        sy += c.row;
+        n++;
+      }
+      return n == 0 ? (0.0, 0.0) : (sx / n, sy / n);
+    }
+
+    final added = session.preview.cells.difference(session.lastPreview.cells);
+    final (ox, oy) = centroid(session.lastPreview.cells);
+    final (nx, ny) =
+        added.isNotEmpty ? centroid(added) : centroid(session.preview.cells);
+    final dx = nx - ox, dy = ny - oy;
+    if (dx == 0 && dy == 0) return _approachDirection(session);
+    if (dx.abs() >= dy.abs()) {
+      return dx >= 0 ? CardinalEdge.east : CardinalEdge.west;
+    }
+    return dy >= 0 ? CardinalEdge.south : CardinalEdge.north;
   }
 
   CardinalEdge _approachDirection(DragSession session) {
