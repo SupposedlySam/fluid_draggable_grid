@@ -2,6 +2,21 @@ import 'package:flutter/widgets.dart';
 
 import 'amoeba_card_scope.dart';
 
+/// Clips to the card outline (in the clipped widget's local coordinates)
+/// — the hard guarantee that no body content ever paints outside the
+/// silhouette, whatever a child does.
+class _OutlineClipper extends CustomClipper<Path> {
+  const _OutlineClipper(this.path);
+
+  final Path path;
+
+  @override
+  Path getClip(Size size) => path;
+
+  @override
+  bool shouldReclip(_OutlineClipper oldClipper) => oldClipper.path != path;
+}
+
 /// Shape-aware card scaffold: a [header] pinned inside the shape's TOPMOST
 /// solid span — where a title visually belongs, never inside a notch — and
 /// a [body] that receives the FULL remaining shape below it, so shape-aware
@@ -128,7 +143,19 @@ class AmoebaShell extends StatelessWidget {
             child: AmoebaPadding(
               padding: EdgeInsets.fromLTRB(
                   padding.left, 0, padding.right, padding.bottom),
-              child: ClipRect(child: body),
+              // Clip to the OUTLINE, not the bounding box: the box covers
+              // the whole bounding rect, including regions the polyomino
+              // doesn't occupy — a child that ignores (or falls off) the
+              // spans must never paint onto the page background there.
+              // The padded child's local origin sits at (padding.left, 0)
+              // of the body geometry, so shift the path to match.
+              child: Builder(builder: (context) {
+                final scoped = AmoebaCardScope.of(context);
+                return ClipPath(
+                  clipper: _OutlineClipper(scoped.path),
+                  child: body,
+                );
+              }),
             ),
           ),
         ),

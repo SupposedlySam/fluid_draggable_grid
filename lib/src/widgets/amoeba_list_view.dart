@@ -153,8 +153,47 @@ class _AmoebaListViewState extends State<AmoebaListView> {
           lo = newLo;
           hi = newHi;
         }
-        if (lo == null || hi == null) return spanAt((top + bottom) / 2);
+        // No band overlaps the row at all: it lies wholly outside the
+        // shape (e.g. slots past the silhouette's bottom in a box taller
+        // than the shape) — it must not render, not borrow a distant span.
+        if (lo == null || hi == null) return (0, 0);
         return (lo, hi - lo);
+      }
+
+      // Bands are straight-edged, but the outline's corner ARCS cut deeper
+      // than any edge inset — a row whose slot lands beside a rounded
+      // corner would poke into the curve. Probe the row's corners against
+      // the outline path and walk each end inward until it clears.
+      final path = geometry?.path;
+      final maxArc = config == null
+          ? 0.0
+          : (config.insideCornerRadius > config.outsideCornerRadius
+                  ? config.insideCornerRadius
+                  : config.outsideCornerRadius) +
+              4;
+      (double, double) clearArcs(
+          double left, double width, double top, double bottom) {
+        if (path == null || width <= 0) return (left, width);
+        var lo = left;
+        var hi = left + width;
+        const step = 4.0;
+        var budget = maxArc;
+        while (budget > 0 &&
+            hi - lo > 0 &&
+            (!path.contains(Offset(lo, top)) ||
+                !path.contains(Offset(lo, bottom)))) {
+          lo += step;
+          budget -= step;
+        }
+        budget = maxArc;
+        while (budget > 0 &&
+            hi - lo > 0 &&
+            (!path.contains(Offset(hi, top)) ||
+                !path.contains(Offset(hi, bottom)))) {
+          hi -= step;
+          budget -= step;
+        }
+        return (lo, (hi - lo).clamp(0.0, double.infinity));
       }
 
       final rows = <Widget>[];
@@ -162,8 +201,11 @@ class _AmoebaListViewState extends State<AmoebaListView> {
         final top = i * widget.itemExtent;
         final screenTop = top - offset;
         if (screenTop > viewportHeight || screenTop + widget.itemExtent < 0) continue; // cull
-        final (spanLeft, spanWidth) = spanForRange(
+        final (rawLeft, rawWidth) = spanForRange(
             screenTop - clearance, screenTop + widget.itemExtent + clearance);
+        final (spanLeft, spanWidth) = clearArcs(rawLeft, rawWidth,
+            screenTop.clamp(0.0, viewportHeight),
+            (screenTop + widget.itemExtent).clamp(0.0, viewportHeight));
         final left = spanLeft + widget.rowPadding.left;
         final width = (spanWidth - widget.rowPadding.horizontal).clamp(0.0, double.infinity);
         rows.add(Positioned(
