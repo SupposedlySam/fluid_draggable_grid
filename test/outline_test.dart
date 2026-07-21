@@ -162,5 +162,26 @@ void main() {
       expect(midBounds.width, greaterThan(from.getBounds().width));
       expect(midBounds.width, lessThan(to.getBounds().width));
     });
+
+    test('keeps corner arcs round mid-morph (no chamfer)', () {
+      // Morphing a shape onto itself is the drag-in-place case where the
+      // resampled preview visibly chamfered every corner: coarse uniform
+      // samples put ~2 points on a 20px arc and connected them with a
+      // straight cut. The arc's 45-degree apex bulges outside that chord,
+      // so containment of a point just inside the apex proves the morph
+      // frame still follows the arc.
+      final shape = CardShape.rect(0, 0, 1, 1);
+      final outline = CardOutline.trace(shape, metrics).paths;
+      final bounds = outline.getBounds();
+      final r = config.outsideCornerRadius;
+      final center = bounds.topLeft + Offset(r, r);
+      final apexInset =
+          center + const Offset(-1, -1) / 1.4142135 * (r - 1.5);
+      expect(outline.contains(apexInset), isTrue,
+          reason: 'sanity: the probe sits inside the true outline');
+      final mid = lerpOutline(outline, outline, 0.5);
+      expect(mid.contains(apexInset), isTrue,
+          reason: 'mid-morph outline must still bulge to the arc apex');
+    });
   });
 }

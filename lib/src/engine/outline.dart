@@ -222,29 +222,55 @@ class CardOutline {
 /// same number of points along their path metrics. Cheap enough for
 /// per-frame use and produces the organic "amoeba" morph between cell-
 /// quantized shapes.
-Path lerpOutline(Path from, Path to, double t, {int samples = 96}) {
+///
+/// Corner fidelity: a corner arc is a small fraction of the perimeter, so
+/// with a fixed coarse sample count it collapses to a straight chamfer for
+/// the duration of the morph. Two measures keep corners round: the sample
+/// count scales with the longer path's perimeter (unless an explicit
+/// [samples] is passed), and the resampled points are reconnected with
+/// midpoint quadratics instead of a raw polyline — collinear runs stay
+/// perfectly straight while any residual faceting at corners is smoothed.
+Path lerpOutline(Path from, Path to, double t, {int? samples}) {
   if (t <= 0) return from;
   if (t >= 1) return to;
-  final a = _sample(from, samples);
-  final b = _sample(to, samples);
+  final count = samples ??
+      (_longestLoop(from, to) / 3).ceil().clamp(96, 480).toInt();
+  final a = _sample(from, count);
+  final b = _sample(to, count);
   final loops = a.length < b.length ? a.length : b.length;
   final out = Path()..fillType = PathFillType.evenOdd;
   for (var loop = 0; loop < loops; loop++) {
     final pa = a[loop];
     final pb = b[loop];
-    for (var i = 0; i < samples; i++) {
-      final p = Offset.lerp(pa[i], pb[i], t)!;
-      if (i == 0) {
-        out.moveTo(p.dx, p.dy);
-      } else {
-        out.lineTo(p.dx, p.dy);
-      }
+    final points = List<Offset>.generate(
+        count, (i) => Offset.lerp(pa[i], pb[i], t)!);
+    // Closed-loop midpoint smoothing: move to the first edge midpoint, then
+    // one quadratic per point with that point as control and the next edge
+    // midpoint as endpoint.
+    Offset mid(int i) =>
+        (points[i % count] + points[(i + 1) % count]) / 2;
+    final start = mid(0);
+    out.moveTo(start.dx, start.dy);
+    for (var i = 1; i <= count; i++) {
+      final control = points[i % count];
+      final end = mid(i);
+      out.quadraticBezierTo(control.dx, control.dy, end.dx, end.dy);
     }
     out.close();
   }
   // Loops present in only one shape fade abruptly; acceptable for the rare
   // split/merge frame.
   return out;
+}
+
+double _longestLoop(Path from, Path to) {
+  var longest = 0.0;
+  for (final path in [from, to]) {
+    for (final metric in path.computeMetrics()) {
+      if (metric.length > longest) longest = metric.length;
+    }
+  }
+  return longest;
 }
 
 List<List<Offset>> _sample(Path path, int samples) {

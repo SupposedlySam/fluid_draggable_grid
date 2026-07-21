@@ -1,3 +1,12 @@
+## Unreleased
+
+- **Fix**: every corner radius flattened to a chamfer while a drag morph was
+  animating, popping back to a round arc on settle. `lerpOutline` resampled
+  both outlines to 96 evenly-spaced points and reconnected them as a straight
+  polyline, leaving ~2 samples on a whole corner arc. The morph now scales
+  its sample count with the perimeter and reconnects samples with midpoint
+  quadratics — straight runs stay straight, corners stay round.
+
 ## 0.0.1
 
 Initial release.
