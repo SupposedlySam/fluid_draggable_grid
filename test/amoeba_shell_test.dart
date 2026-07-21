@@ -21,11 +21,13 @@ void main() {
 
   testWidgets('header sits in the topmost span, not the largest rect',
       (tester) async {
-    // L-shape: narrow arm on top-left, wide block below — the largest
-    // rect is the bottom block, but the title belongs in the top arm.
+    // L-shape: two-cell arm on top-left (wide enough for a header), wide
+    // block below — the largest rect is the bottom block, but the title
+    // belongs in the top arm.
     final shape = CardShape(const [
-      CellIndex(0, 0),
+      CellIndex(0, 0), CellIndex(1, 0),
       CellIndex(0, 1), CellIndex(1, 1), CellIndex(2, 1), CellIndex(3, 1),
+      CellIndex(4, 1),
     ]);
     final geometry = AmoebaCardGeometry.compute(shape, metrics);
     await tester.pumpWidget(host(
@@ -37,13 +39,15 @@ void main() {
     ));
     final headerTop = tester.getTopLeft(find.text('TITLE')).dy;
     // In the top band (arm), not down at the big block.
+    expect(geometry.largestRect.top, greaterThan(0),
+        reason: 'sanity: the 5-wide bottom block must be the largest rect');
     expect(headerTop, lessThan(geometry.largestRect.top));
   });
 
   testWidgets('body scope is cropped below the header and keeps notches',
       (tester) async {
     final shape = CardShape(const [
-      CellIndex(0, 0),
+      CellIndex(0, 0), CellIndex(1, 0),
       CellIndex(0, 1), CellIndex(1, 1), CellIndex(2, 1), CellIndex(3, 1),
     ]);
     AmoebaCardGeometry? seen;
@@ -68,6 +72,29 @@ void main() {
         .any((band) => band.spans.every((s) => s.width < seen!.size.width / 2));
     expect(narrow, isTrue,
         reason: 'cropped scope must keep the notch structure');
+  });
+
+  testWidgets('a too-narrow top arm defers the header to the next wide band',
+      (tester) async {
+    // S-shape with a single-cell arm on top: the header must skip it and
+    // land in the wide block below, not strand a title-less icon strip.
+    final shape = CardShape(const [
+      CellIndex(3, 0),
+      CellIndex(0, 1), CellIndex(1, 1), CellIndex(2, 1), CellIndex(3, 1),
+    ]);
+    final geometry = AmoebaCardGeometry.compute(shape, metrics);
+    await tester.pumpWidget(host(
+      shape,
+      AmoebaShell(
+        header: const Text('TITLE'),
+        body: const SizedBox.expand(),
+      ),
+    ));
+    final headerTop = tester.getTopLeft(find.text('TITLE')).dy;
+    final topArmBand = geometry.rowBands.first;
+    expect(headerTop, greaterThanOrEqualTo(topArmBand.end),
+        reason: 'the one-cell arm cannot fit a header — it must drop to '
+            'the wide band below');
   });
 
   testWidgets('degrades to a plain column outside a fluid card',

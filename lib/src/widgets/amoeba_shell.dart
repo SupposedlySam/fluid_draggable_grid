@@ -31,6 +31,7 @@ class AmoebaShell extends StatelessWidget {
     this.headerExtent = 22,
     this.gap = 8,
     this.compactExtent = 84,
+    this.minHeaderWidth = 140,
   });
 
   final Widget header;
@@ -50,6 +51,11 @@ class AmoebaShell extends StatelessWidget {
   /// reads as a labeled sliver instead of clipping its content.
   final double compactExtent;
 
+  /// A top span narrower than this can't fit a real header (fixed icons
+  /// squeeze the title to nothing) — the header drops to the first band
+  /// with room, or the widest span anywhere as a last resort.
+  final double minHeaderWidth;
+
   @override
   Widget build(BuildContext context) {
     final geometry = AmoebaCardScope.maybeOf(context);
@@ -67,11 +73,27 @@ class AmoebaShell extends StatelessWidget {
       );
     }
 
-    // The topmost band's widest span is the shape's natural title position.
-    final topBand = geometry.rowBands.first;
+    // The highest band whose widest span can actually FIT a header is the
+    // shape's natural title position — a one-cell top arm would squeeze
+    // the title to nothing between the header's fixed-width icons.
+    var topBand = geometry.rowBands.first;
     var headerSpan = topBand.spans.first;
-    for (final span in topBand.spans) {
-      if (span.width > headerSpan.width) headerSpan = span;
+    var found = false;
+    for (final band in geometry.rowBands) {
+      var widest = band.spans.first;
+      for (final span in band.spans) {
+        if (span.width > widest.width) widest = span;
+      }
+      if (!found && widest.width - padding.horizontal >= minHeaderWidth) {
+        topBand = band;
+        headerSpan = widest;
+        found = true;
+      }
+      // Last-resort fallback: the widest span anywhere.
+      if (!found && widest.width > headerSpan.width) {
+        topBand = band;
+        headerSpan = widest;
+      }
     }
     final headerRect = Rect.fromLTWH(
       headerSpan.left + padding.left,
