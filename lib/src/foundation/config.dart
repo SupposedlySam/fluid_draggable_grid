@@ -1,5 +1,20 @@
 import 'package:flutter/foundation.dart';
 
+/// How a drag on a card's *body* (anywhere that isn't an edge/corner handle)
+/// begins.
+enum BodyDragActivation {
+  /// A pan anywhere on the card body starts a move immediately — even
+  /// through hit-opaque content. Card content cannot receive taps or
+  /// drag-scrolls of its own.
+  immediate,
+
+  /// A body move starts only after a long-press (then movement). Taps,
+  /// drag-scrolls, and other gestures inside card content win instantly
+  /// because the card no longer competes in the pan arena. Edge/corner
+  /// handles still drag immediately — they are chrome, not content.
+  longPress,
+}
+
 /// Immutable configuration for a [AmoebaGridView], supplied once at app init.
 ///
 /// The grid is a fixed field of [columns] x [rows] square cells. Each cell's
@@ -18,6 +33,7 @@ class AmoebaGridConfig {
     this.insideCornerRadius = 10,
     this.outsideCornerRadius = 22,
     this.breakpoints = defaultBreakpoints,
+    this.bodyDragActivation = BodyDragActivation.immediate,
   })  : assert(columns > 0),
         assert(rows > 0),
         assert(minCellExtent > 0),
@@ -55,6 +71,11 @@ class AmoebaGridConfig {
   /// wins, falling back toward zero).
   final List<double> breakpoints;
 
+  /// How a drag on a card body begins. Defaults to
+  /// [BodyDragActivation.immediate] (the historical behavior); use
+  /// [BodyDragActivation.longPress] to keep card content interactive.
+  final BodyDragActivation bodyDragActivation;
+
   /// Material 3 window-class edges.
   static const List<double> defaultBreakpoints = [0, 600, 905, 1240, 1600];
 
@@ -76,6 +97,7 @@ class AmoebaGridConfig {
     double? insideCornerRadius,
     double? outsideCornerRadius,
     List<double>? breakpoints,
+    BodyDragActivation? bodyDragActivation,
   }) {
     return AmoebaGridConfig(
       columns: columns ?? this.columns,
@@ -86,6 +108,7 @@ class AmoebaGridConfig {
       insideCornerRadius: insideCornerRadius ?? this.insideCornerRadius,
       outsideCornerRadius: outsideCornerRadius ?? this.outsideCornerRadius,
       breakpoints: breakpoints ?? this.breakpoints,
+      bodyDragActivation: bodyDragActivation ?? this.bodyDragActivation,
     );
   }
 
@@ -99,10 +122,19 @@ class AmoebaGridConfig {
         other.gap == gap &&
         other.insideCornerRadius == insideCornerRadius &&
         other.outsideCornerRadius == outsideCornerRadius &&
+        other.bodyDragActivation == bodyDragActivation &&
         listEquals(other.breakpoints, breakpoints);
   }
 
   @override
-  int get hashCode => Object.hash(columns, rows, minCellExtent, maxCellExtent,
-      gap, insideCornerRadius, outsideCornerRadius, Object.hashAll(breakpoints));
+  int get hashCode => Object.hash(
+      columns,
+      rows,
+      minCellExtent,
+      maxCellExtent,
+      gap,
+      insideCornerRadius,
+      outsideCornerRadius,
+      bodyDragActivation,
+      Object.hashAll(breakpoints));
 }

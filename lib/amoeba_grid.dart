@@ -14,7 +14,8 @@ export 'src/engine/grid_metrics.dart' show GridMetrics;
 export 'src/engine/handles.dart' show GridHandle;
 export 'src/foundation/cell.dart'
     show CardShape, CardinalEdge, CellIndex, CornerKind;
-export 'src/foundation/config.dart' show AmoebaGridConfig;
+export 'src/foundation/config.dart'
+    show AmoebaGridConfig, BodyDragActivation;
 export 'src/foundation/diagnostics.dart'
     show AmoebaGridDiagnostics, AmoebaGridEvent, AmoebaGridEventKind;
 export 'src/foundation/storage.dart'

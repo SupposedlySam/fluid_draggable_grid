@@ -9,6 +9,7 @@ import '../engine/grid_metrics.dart';
 import '../engine/handles.dart';
 import '../engine/outline_cache.dart';
 import '../foundation/cell.dart';
+import '../foundation/config.dart';
 import '../foundation/diagnostics.dart';
 import 'card_chrome.dart';
 
@@ -170,6 +171,14 @@ class _AmoebaGridViewState extends State<AmoebaGridView>
   /// hit-testing again at onStart would miss the card the user grabbed.
   (Offset downPosition, String cardId, GridHandle? handle)? _pendingGrab;
 
+  /// The body grab captured by the long-press recognizer at pointer-down
+  /// (longPress activation only). Kept separate from [_pendingGrab]: both
+  /// recognizers see the same pointer-down and must not clobber each other.
+  (Offset downPosition, String cardId)? _pendingLongPressGrab;
+
+  BodyDragActivation get _bodyDragActivation =>
+      widget.controller.config.bodyDragActivation;
+
   bool _capturePanDown(Offset point) {
     // Read the CURRENT metrics, never a value captured when this recognizer was built.
     // RawGestureDetector constructs a recognizer ONCE and only re-runs the initializer on rebuild,
@@ -197,8 +206,61 @@ class _AmoebaGridViewState extends State<AmoebaGridView>
       _pendingGrab = null;
       return false;
     }
+    if (_bodyDragActivation == BodyDragActivation.longPress &&
+        interaction.$2 == null) {
+      // Body grabs belong to the long-press recognizer in this mode; the
+      // pan recognizer only claims handles, so gestures inside card content
+      // (taps, drag-scrolls) win the arena instantly.
+      _pendingGrab = null;
+      return false;
+    }
     _pendingGrab = (point, interaction.$1, interaction.$2);
     return true;
+  }
+
+  /// Long-press twin of [_capturePanDown]: claims only card *bodies* —
+  /// handles stay on the immediate pan path even in longPress mode.
+  bool _captureLongPressDown(Offset point) {
+    // Live metrics for the same staleness reason as _capturePanDown.
+    final metrics = widget.controller.metrics;
+    if (metrics == null) return false;
+    final held = _hoveredHandle;
+    final interaction = (held != null && held.hits(point))
+        ? (held.cardId, held)
+        : _interactionAt(point, metrics);
+    if (interaction == null || interaction.$2 != null) {
+      _pendingLongPressGrab = null;
+      return false;
+    }
+    _pendingLongPressGrab = (point, interaction.$1);
+    return true;
+  }
+
+  void _onLongPressStart(LongPressStartDetails details) {
+    final grab = _pendingLongPressGrab;
+    _pendingLongPressGrab = null;
+    if (grab == null) {
+      AmoebaGridDiagnostics.emit(AmoebaGridEventKind.gestureRejected,
+          'long-press accepted but no pending grab');
+      return;
+    }
+    final (downPosition, cardId) = grab;
+    AmoebaGridDiagnostics.emit(AmoebaGridEventKind.gestureAccepted,
+        'body long-press won the arena', {'card': cardId});
+    // Same drag-engine path as an immediate pan; starting the session here
+    // (before any movement) raises the card's lift cue as the pick-up signal.
+    widget.controller.startMove(cardId, downPosition);
+    if (details.localPosition != downPosition) {
+      widget.controller.updateDrag(details.localPosition);
+    }
+    _dragViewportPoint = _toViewportSpace(details.localPosition);
+    _startAutoScroller();
+  }
+
+  void _onLongPressMove(LongPressMoveUpdateDetails details) {
+    if (!widget.controller.isDragging) return;
+    widget.controller.updateDrag(details.localPosition);
+    _dragViewportPoint = _toViewportSpace(details.localPosition);
   }
 
   (String cardId, GridHandle? handle)? _interactionAt(
@@ -403,6 +465,19 @@ class _AmoebaGridViewState extends State<AmoebaGridView>
               recognizer.onCancel = _onPanCancel;
             },
           ),
+          if (_bodyDragActivation == BodyDragActivation.longPress)
+            _CardLongPressRecognizer: GestureRecognizerFactoryWithHandlers<
+                _CardLongPressRecognizer>(
+              () => _CardLongPressRecognizer(
+                  shouldAccept: _captureLongPressDown),
+              (recognizer) {
+                recognizer.onLongPressStart = _onLongPressStart;
+                recognizer.onLongPressMoveUpdate = _onLongPressMove;
+                recognizer.onLongPressEnd = (_) => _onPanEnd();
+                recognizer.onLongPressCancel = _onPanCancel;
+                recognizer.onPointerCancelled = _onPanCancel;
+              },
+            ),
         },
         child: Stack(
           clipBehavior: Clip.none,
@@ -509,6 +584,35 @@ class _CardPanRecognizer extends PanGestureRecognizer {
     AmoebaGridDiagnostics.emit(AmoebaGridEventKind.gestureRejected,
         'card pan lost the arena (another recognizer took the drag)');
     super.rejectGesture(pointer);
+  }
+}
+
+/// Starts body drags after a hold ([BodyDragActivation.longPress]): joins
+/// the arena only for pointers that go down on a card *body*, waits out the
+/// hold, then feeds the same drag path the pan recognizer uses. Losing a
+/// quick pan or tap to content recognizers (or the scrollable) is the whole
+/// point — content stays interactive.
+class _CardLongPressRecognizer extends LongPressGestureRecognizer {
+  _CardLongPressRecognizer({required this.shouldAccept})
+      : super(duration: const Duration(milliseconds: 350));
+
+  final bool Function(Offset localPosition) shouldAccept;
+
+  /// Fired on a raw pointer cancel even after the long-press was accepted —
+  /// [onLongPressCancel] only covers pre-accept cancels, and a mid-drag
+  /// cancel (e.g. window focus loss) must not strand a live drag session.
+  VoidCallback? onPointerCancelled;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (!shouldAccept(event.localPosition)) return;
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void handlePrimaryPointer(PointerEvent event) {
+    if (event is PointerCancelEvent) onPointerCancelled?.call();
+    super.handlePrimaryPointer(event);
   }
 }
 

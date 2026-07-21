@@ -1,3 +1,16 @@
+## Unreleased
+
+- **New — `AmoebaGridConfig.bodyDragActivation`** (`BodyDragActivation`):
+  controls how a drag on a card *body* begins.
+  - `immediate` (default, unchanged behavior): a pan anywhere on the body
+    moves the card — even through hit-opaque content.
+  - `longPress`: a body move starts only after a ~350ms hold (then movement),
+    feeding the same drag-engine path pans use. The card stops competing in
+    the pan arena, so taps, drag-scrolls, and other gestures inside card
+    content win instantly. On activation the card raises its lift cue as the
+    pick-up signal. Edge/corner **handles keep immediate drag** in both modes —
+    they are chrome, not content.
+
 ## 0.2.0
 
 - **New — `AmoebaShell`**: shape-aware header/body card scaffold. The header pins
