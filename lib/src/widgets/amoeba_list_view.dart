@@ -10,6 +10,12 @@ import 'amoeba_card_scope.dart';
 /// row's height (text re-wrapping), which can't be resolved in one layout pass.
 ///
 /// Outside a fluid card (no [AmoebaCardScope]) it degrades to a plain fixed-extent scrolling list.
+///
+/// Placement matters: this widget must see the card's FULL shape to re-flow. Do not nest it inside
+/// [AmoebaContentArea] — that crops the published geometry to the largest notch-free rectangle, so
+/// every span reads full-width and rows stop tracking notches. Inset it with [AmoebaPadding]
+/// (outline-aware, keeps geometry true) instead of a plain [Padding] (which silently misaligns the
+/// span coordinates).
 class AmoebaListView extends StatefulWidget {
   const AmoebaListView({
     super.key,
