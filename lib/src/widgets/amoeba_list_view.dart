@@ -53,6 +53,8 @@ class AmoebaListView extends StatefulWidget {
 
 class _AmoebaListViewState extends State<AmoebaListView> {
   ScrollController? _own;
+  bool _warnedWindowed = false;
+  bool _warnedMisaligned = false;
   ScrollController get _controller => widget.controller ?? (_own ??= ScrollController());
 
   @override
@@ -87,8 +89,34 @@ class _AmoebaListViewState extends State<AmoebaListView> {
     final geometry = AmoebaCardScope.maybeOf(context);
     final offset = _controller.hasClients ? _controller.offset : 0.0;
 
+    assert(() {
+      if (geometry != null && geometry.windowed && !_warnedWindowed) {
+        _warnedWindowed = true;
+        debugPrint(
+            '[amoeba_grid] AmoebaListView is inside AmoebaContentArea: that '
+            'scope is windowed to the largest notch-free rectangle, so rows '
+            'will NEVER re-flow into notches. Inset with AmoebaPadding (or '
+            'use AmoebaShell) instead.');
+      }
+      return true;
+    }());
     return LayoutBuilder(builder: (context, constraints) {
       final viewportWidth = constraints.maxWidth;
+      assert(() {
+        if (geometry != null &&
+            !_warnedMisaligned &&
+            (viewportWidth - geometry.size.width).abs() > 1) {
+          _warnedMisaligned = true;
+          debugPrint(
+              '[amoeba_grid] AmoebaListView box width '
+              '(${viewportWidth.toStringAsFixed(1)}) does not match its '
+              'scope geometry (${geometry.size.width.toStringAsFixed(1)}): '
+              'a plain Padding/SizedBox/Align between the card and this '
+              'widget breaks span alignment — use AmoebaPadding, which '
+              'republishes the geometry in the child\'s coordinates.');
+        }
+        return true;
+      }());
       final viewportHeight = constraints.maxHeight;
       final contentHeight = widget.itemCount * widget.itemExtent;
 

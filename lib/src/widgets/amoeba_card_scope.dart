@@ -113,7 +113,7 @@ class AmoebaContentArea extends StatelessWidget {
     final rect = padding.deflateRect(geometry.largestRect);
     if (rect.isEmpty) return const SizedBox.shrink();
     Widget content = AmoebaCardScope(
-      geometry: geometry.cropTo(rect),
+      geometry: geometry.cropTo(rect).markWindowed(),
       child: child,
     );
     if (alignment != null) {

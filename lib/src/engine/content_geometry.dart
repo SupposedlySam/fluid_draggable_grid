@@ -72,6 +72,7 @@ class AmoebaCardGeometry {
     required this.insets,
     this.contentClip,
     this.contentInset = 0,
+    this.windowed = false,
   });
 
   factory AmoebaCardGeometry.compute(CardShape shape, GridMetrics metrics) {
@@ -141,13 +142,27 @@ class AmoebaCardGeometry {
   /// widgets need against horizontal edges.
   final double contentInset;
 
+  /// True when this geometry was windowed to a notch-free rectangle
+  /// (AmoebaContentArea): flow widgets under it can never re-flow, which
+  /// is almost always an integration mistake — they warn in debug mode.
+  final bool windowed;
+
+  /// A copy flagged as rectangular-windowed (see [windowed]).
+  AmoebaCardGeometry markWindowed() => AmoebaCardGeometry._(
+        shape: shape, metrics: metrics, size: size, path: path,
+        rowBands: rowBands, columnBands: columnBands,
+        largestRect: largestRect, regions: regions, insets: insets,
+        contentClip: contentClip, contentInset: contentInset,
+        windowed: true,
+      );
+
   /// A copy carrying the clip surface [AmoebaPadding] enforces.
   AmoebaCardGeometry withContentClip(Path clip, double inset) =>
       AmoebaCardGeometry._(
         shape: shape, metrics: metrics, size: size, path: path,
         rowBands: rowBands, columnBands: columnBands,
         largestRect: largestRect, regions: regions, insets: insets,
-        contentClip: clip, contentInset: inset,
+        contentClip: clip, contentInset: inset, windowed: windowed,
       );
 
   /// A copy with [padding] carved off every side: local origin moves to
@@ -242,6 +257,7 @@ class AmoebaCardGeometry {
       ),
       contentClip: contentClip?.shift(shifted),
       contentInset: contentInset,
+      windowed: windowed,
     );
   }
 
