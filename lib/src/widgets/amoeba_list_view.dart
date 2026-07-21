@@ -229,6 +229,24 @@ class _AmoebaListViewState extends State<AmoebaListView> {
         return (lo, (hi - lo).clamp(0.0, double.infinity));
       }
 
+      // Flush bottom (zero bottom inset): the box ends AT the outline, so
+      // rows near the bottom corner would probe into the corner arc and
+      // stair-step inward. Per-side padding ends before the corner turn:
+      // content runs straight to the edge and the card's rounded outline
+      // trims the corner pixels instead (edge-to-edge list look). Only the
+      // 0 case behaves this way — any real inset keeps today's arc probe.
+      final pathBottom = path?.getBounds().bottom ?? viewportHeight;
+      final bottomIsFlush = (pathBottom - viewportHeight).abs() < 1;
+      final cornerGuard = config == null
+          ? 0.0
+          : (config.outsideCornerRadius > config.insideCornerRadius
+                  ? config.outsideCornerRadius
+                  : config.insideCornerRadius) +
+              1;
+      double bottomProbeY(double y) => bottomIsFlush
+          ? (y > pathBottom - cornerGuard ? pathBottom - cornerGuard : y)
+          : y;
+
       final rows = <Widget>[];
       for (var i = 0; i < widget.itemCount; i++) {
         final top = i * widget.itemExtent;
@@ -237,8 +255,9 @@ class _AmoebaListViewState extends State<AmoebaListView> {
         final (rawLeft, rawWidth) = spanForRange(
             screenTop - clearance, screenTop + widget.itemExtent + clearance);
         final (spanLeft, spanWidth) = clearArcs(rawLeft, rawWidth,
-            screenTop.clamp(0.0, viewportHeight),
-            (screenTop + widget.itemExtent).clamp(0.0, viewportHeight));
+            bottomProbeY(screenTop.clamp(0.0, viewportHeight)),
+            bottomProbeY(
+                (screenTop + widget.itemExtent).clamp(0.0, viewportHeight)));
         final left = spanLeft + widget.rowPadding.left;
         final width = (spanWidth - widget.rowPadding.horizontal).clamp(0.0, double.infinity);
         rows.add(Positioned(
