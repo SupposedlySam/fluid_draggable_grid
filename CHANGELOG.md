@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.0
 
 - **New — `AmoebaGridConfig.bodyDragActivation`** (`BodyDragActivation`):
   controls how a drag on a card *body* begins.
