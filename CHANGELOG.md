@@ -7,6 +7,20 @@
   its sample count with the perimeter and reconnects samples with midpoint
   quadratics — straight runs stay straight, corners stay round.
 
+## 0.1.0
+
+- **New — `AmoebaListView`**: a fixed-extent, vertically-scrolling list whose rows RE-FLOW to
+  the card's polyomino shape as they scroll — a row narrows when it scrolls up into a notch and
+  sweeps to the full width where the card is solid. Re-queried every scroll frame, not laid out
+  once; degrades to a plain list outside a fluid card.
+
+- **Fix**: disposing an `AmoebaGridView` before any handle had been hovered
+  threw *"Looking up a deactivated widget's ancestor is unsafe"*. The
+  `_handleReveal` `AnimationController` was a lazy `late final`, so a view
+  torn down without a hover lazily constructed it *inside* `dispose()`, where
+  `createTicker`'s ancestor lookup runs on a deactivated element. It is now
+  created in `initState`. Regression test added (`test/dispose_test.dart`).
+
 ## 0.0.1
 
 Initial release.

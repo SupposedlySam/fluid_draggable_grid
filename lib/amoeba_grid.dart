@@ -29,4 +29,5 @@ export 'src/widgets/amoeba_card_scope.dart'
 export 'src/widgets/amoeba_flow.dart'
     show AmoebaColumn, AmoebaFlow, AmoebaFlowAlignment, AmoebaRow;
 export 'src/widgets/amoeba_grid_view.dart' show AmoebaGridCard, AmoebaGridView;
+export 'src/widgets/amoeba_list_view.dart' show AmoebaListView;
 export 'src/widgets/amoeba_text.dart' show AmoebaText;

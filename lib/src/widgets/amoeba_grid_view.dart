@@ -56,8 +56,11 @@ class _AmoebaGridViewState extends State<AmoebaGridView>
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
 
-  late final AnimationController _handleReveal = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 160));
+  // Created in initState, NOT as a lazy `late final`: a view disposed before anything ever touched
+  // _handleReveal (e.g. a test that mounts and tears down without a hover) would otherwise lazily
+  // construct the controller INSIDE dispose(), and createTicker's ancestor lookup on a deactivated
+  // element throws "Looking up a deactivated widget's ancestor is unsafe".
+  late final AnimationController _handleReveal;
 
   GridHandle? _hoveredHandle;
   String? _hoveredCardId;
@@ -73,6 +76,8 @@ class _AmoebaGridViewState extends State<AmoebaGridView>
   void initState() {
     super.initState();
     widget.controller.registerCards(_initialShapes());
+    _handleReveal = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 160));
     widget.controller.load();
     widget.controller.addListener(_onControllerChanged);
   }
